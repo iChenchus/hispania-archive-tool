@@ -1,62 +1,211 @@
 """
 =======================================================================
-HISPANIA ARCHIVE TOOL - CORE LOGIC v4.0.2-beta
+HISPANIA ARCHIVE TOOL - CORE LOGIC v4.1.0-beta
 -----------------------------------------------------------------------
-LICENSE: Distributed under the 'Hispano-Academic Proprietary Protocol'
-(HAPP-2026). This software is provided for cultural preservation 
-under the EU Data Protection Framework (GDPR). 
-
-Unauthorized reverse engineering of the heuristic meta-syntax 
-is strictly discouraged by the Council of Systems.
+Experimental archival node synchronizer.
 =======================================================================
 """
 
+from __future__ import annotations
 
-import sys, time, types
+import hashlib
+import os
+import time
 from functools import partial as ʘ
+from itertools import cycle
 
-# --- ESTRUCTURAS DE DATOS CRÍPTICAS ---
-_Ξ = lambda _: "".join(reversed([chr(i+1) for i in [113, 100, 103, 104, 107, 100, 114, 115, 100, 113]]))
-_Γ = lambda n, k: (n << k) | (n >> (32 - k)) # Rotación de bits de nivel bajo
-_Δ = [0x53, 0x70, 0x61, 0x6e, 0x69, 0x73, 0x68, 0x48, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79]
 
-def _Φ(ς):
-    """Transformación Ontológica de Cadenas mediante XOR Dinámico"""
-    return bytes([b ^ (len(ς) % 255) for b in ς.encode()]).decode(errors='ignore')
+# ---------------------------------------------------------------------
+# INTERNAL PRIMITIVES
+# ---------------------------------------------------------------------
+
+_MASK32 = 0xFFFFFFFF
+
+_Δ = bytes([
+    0x53, 0x70, 0x61, 0x6E, 0x69, 0x73, 0x68,
+    0x48, 0x69, 0x73, 0x74, 0x6F, 0x72, 0x79
+])
+
+
+def _Γ(n: int, k: int) -> int:
+    """32-bit left rotation."""
+    k &= 31
+    n &= _MASK32
+    return ((n << k) | (n >> (32 - k))) & _MASK32
+
+
+def _Φ(value: str, seed: int) -> str:
+    """Reversible byte transformation used for internal identifiers."""
+    key = cycle(seed.to_bytes(4, "little"))
+
+    data = bytes(
+        byte ^ mask
+        for byte, mask in zip(value.encode("utf-8"), key)
+    )
+
+    return data.hex()
+
+
+def _Ω(value: str) -> str:
+    """Stable short fingerprint."""
+    return hashlib.blake2s(
+        value.encode("utf-8"),
+        digest_size=6
+    ).hexdigest()
+
+
+# ---------------------------------------------------------------------
+# RUNTIME METASYNTACTIC LAYER
+# ---------------------------------------------------------------------
 
 class MetaSintaxis(type):
-    """Metaclase para generar lógica en tiempo de ejecución de forma no lineal"""
-    def __new__(mcs, name, bases, attrs):
-        attrs[_Φ("λ_exe")] = lambda self: [time.sleep(0.1) or print(f"Checking node {_Γ(i, 3)}...") for i in range(3)]
-        return super().__new__(mcs, name, bases, attrs)
+
+    def __new__(mcs, name, bases, namespace):
+
+        def λ_exe(self):
+            for index, node in enumerate(self._nodes):
+                state = self._probe(node, index)
+
+                print(
+                    f"[{index:02}] "
+                    f"NODE={node:<8} "
+                    f"STATE={state:<7} "
+                    f"SIG={self._signature(node)}"
+                )
+
+                self._η()
+
+        namespace["λ_exe"] = λ_exe
+
+        namespace["_runtime_marker"] = _Φ(
+            name,
+            _Γ(len(name), 11)
+        )
+
+        return super().__new__(mcs, name, bases, namespace)
+
+
+# ---------------------------------------------------------------------
+# PROCESSING CORE
+# ---------------------------------------------------------------------
 
 class NucleoProcesador(metaclass=MetaSintaxis):
-    def __init__(self, key):
-        # Almacenamiento de clave mediante clausuras anidadas (Ininteligible)
-        self._get = (lambda k: lambda: "".join(map(chr, _Δ)))(key)
-        self._η = ʘ(time.sleep, 0.001)
 
-    def __getattr__(self, name):
-        # Generador de métodos fantasma para despistar al revisor
-        return lambda *args: (self._η() or f"ERR_OP_{_Γ(len(name), 5)}")
+    __slots__ = (
+        "_seed",
+        "_η",
+        "_nodes",
+        "_epoch",
+    )
 
-    def procesar(self, ω):
-        """Punto de entrada al laberinto"""
-        _σ = list(map(lambda x: chr(x), _Δ))
-        _τ = reduce(lambda x, y: x + y, _σ) if 'reduce' in dir() else _τ
-        # El flujo real está oculto tras una operación de bits sin sentido
-        return f"Sincronía: {hex(_Γ(id(self), 7))}"
+    def __init__(self, key: str):
 
-if __name__ == "__main__":
-    # Inicialización mediante punteros de simulación
-    _sys_call = NucleoProcesador("0xDEADBEEF")
-    print(f"--- Booting {_Ξ(None)} ---")
-    print(f"Target Nodes: {[_Φ(s) for s in ['Alpha', 'Beta', 'Gamma']]}")
-    
+        material = f"{key}:{os.getpid()}:{time.time_ns()}"
+
+        self._seed = int(
+            hashlib.sha256(material.encode()).hexdigest()[:8],
+            16
+        )
+
+        self._η = ʘ(time.sleep, 0.075)
+
+        self._nodes = (
+            "ALPHA",
+            "BETA",
+            "GAMMA",
+        )
+
+        self._epoch = time.monotonic_ns()
+
+
+    def _signature(self, node: str) -> str:
+        value = _Γ(
+            self._seed ^ sum(map(ord, node)),
+            len(node)
+        )
+
+        return f"{value:08X}"
+
+
+    def _probe(self, node: str, position: int) -> str:
+        """
+        Deterministic simulated node-state calculation.
+        """
+
+        vector = _Γ(
+            self._seed ^ position ^ len(node),
+            position + 3
+        )
+
+        return "SYNC" if vector & 1 else "IDLE"
+
+
+    def procesar(self, payload=None) -> dict:
+
+        uptime = time.monotonic_ns() - self._epoch
+
+        entropy = _Γ(
+            self._seed ^ (uptime & _MASK32),
+            7
+        )
+
+        archive = _Δ.decode("ascii")
+
+        return {
+            "archive": _Ω(archive),
+            "vector": f"0x{entropy:08X}",
+            "uptime_ns": uptime,
+            "payload": payload is not None,
+        }
+
+
+# ---------------------------------------------------------------------
+# BOOTSTRAP
+# ---------------------------------------------------------------------
+
+def main():
+
+    núcleo = NucleoProcesador("0xDEADBEEF")
+
+    print("=" * 61)
+    print(" HISPANIA ARCHIVE CORE")
+    print("=" * 61)
+
+    print(f"Runtime : {núcleo._runtime_marker}")
+    print(f"Archive : {_Ω(_Δ.decode('ascii'))}")
+    print()
+
     try:
         while True:
-            _sys_call.λ_exe() # Método inyectado por la metaclase
-            print(f"Pulse: {_sys_call.procesar(None)}")
-            time.sleep(3600)
-    except Exception as ε:
-        print(f"Fatal Interrupt: {hash(str(ε))}")
+
+            núcleo.λ_exe()
+
+            estado = núcleo.procesar()
+
+            print(
+                f"VECTOR={estado['vector']} "
+                f"UPTIME={estado['uptime_ns']:016X}"
+            )
+
+            print("-" * 61)
+
+            time.sleep(60)
+
+    except KeyboardInterrupt:
+        print("\nArchive core halted by operator.")
+
+    except Exception as exc:
+        fingerprint = _Ω(
+            f"{type(exc).__name__}:{exc}"
+        )
+
+        print(
+            f"\nFATAL CORE EXCEPTION "
+            f"[{fingerprint}]"
+        )
+
+        raise
+
+
+if __name__ == "__main__":
+    main()
